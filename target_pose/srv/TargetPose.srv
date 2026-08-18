@@ -1,0 +1,6 @@
+float64 input_x
+float64 input_y
+float64 input_yaw
+---
+bool success
+string message
