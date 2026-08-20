@@ -29,7 +29,7 @@ class PoseController(Node):
         self.cmd_vel_pub = self.create_publisher(Twist, '/cmd_vel', 10)
 
         # creating a timer that determines the frequency of the control loop
-        self.timer = self.create_timer(0.05, self.control_loop)
+        self.timer = self.create_timer(0.03, self.control_loop)
 
     # the subscriber callback function that collects and correctly formats the odometry parameters to obtain the desired x, y and yaw
     def odometry_callback(self, msg: Odometry):
@@ -43,14 +43,14 @@ class PoseController(Node):
 
         self.pose_yaw = math.atan2(2.0*(qw*qz + qx*qy), 1.0-2.0*(qy*qy + qz*qz))
 
-        self.get_logger().info(f"x={self.pose_x:.3f}, y={self.pose_y:.3f}, yaw={self.pose_yaw:.3f}")
+        self.get_logger().info(f"x={self.pose_x:.2f}, y={self.pose_y:.2f}, yaw={math.degrees(self.pose_yaw):.2f}")
 
     # the service callback that collects and processes the user input
     def handle_request(self, request, response):
         self.target = [request.input_x, request.input_y, math.radians(request.input_yaw)]
         self.get_logger().info(f"New target: {self.target}")
         response.success = True
-        response.message = 'Goal accepted, moving to target'
+        response.message = 'Goal accepted, moving to target...'
         return response
 
     # control loop that processes user request with respect to the current position and sends required control signals
@@ -66,25 +66,27 @@ class PoseController(Node):
         beta = self.normalize_angle(self.target[2] - self.pose_yaw)
 
         if self.goal_reached(distance, beta):
-            self.get_logger().info("Goal reached, stopping")
+            self.get_logger().info("Goal reached, stopping...")
             self.stop_robot()
             self.target = None
             return
 
         cmd = Twist()
-        kv = 0.6; ka = 1.8; 
-             
+        kv = 0.6; ka = 2.0; kb = -0.4
+
+        w = ka*alpha + kb*beta
         if distance > 0.05:
-            kb = -0.5
+            v = min(0.22, kv*distance)
+
+        elif 0.05 < distance < 0.50:
             v = min(0.22, kv*distance) * max(0.0, math.cos(alpha))
-            w = ka*alpha + kb*beta
+            
         else:
-           kb = 1.0
+           kb = 1.4
            v = 0.0
            w = kb*beta
 
-        v = max(-0.22, min(0.22, v))
-        w = max(-2.84, min(2.84, w))
+        w = max(-0.90, min(0.90, w))
 
         cmd.linear.x = v
         cmd.angular.z = w
